@@ -10,6 +10,7 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../services/place_name_service.dart';
 import '../utils/camera_input_image.dart';
 import 'captured_photos_screen.dart';
 
@@ -218,7 +219,18 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
       final String timeLabel = _formatDateTime(now);
       final String locationLabel =
           'Lat ${pos.latitude.toStringAsFixed(5)}, Lon ${pos.longitude.toStringAsFixed(5)}';
-      final overlayText = '$timeLabel\n$locationLabel';
+      final String? placeName = await PlaceNameService.getPlaceName(
+        pos.latitude,
+        pos.longitude,
+      );
+      final String placeLine = (placeName != null && placeName.isNotEmpty)
+          ? placeName.replaceAll('\n', ' ').length > 60
+              ? '${placeName.replaceAll('\n', ' ').substring(0, 60)}...'
+              : placeName.replaceAll('\n', ' ')
+          : '';
+      final overlayText = placeLine.isEmpty
+          ? '$timeLabel\n$locationLabel'
+          : '$timeLabel\n$placeLine\n$locationLabel';
 
       try {
         final bytes = await File(file.path).readAsBytes();
@@ -226,13 +238,16 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
         if (original != null) {
           final textColor = img.ColorRgba8(255, 255, 255, 255);
           const padding = 16;
-          final y = original.height - 40;
+          final numLines = overlayText.split('\n').length;
+          final lineHeight = 18;
+          int y = original.height - (lineHeight * numLines + 12);
+          if (y < 8) y = 8;
           img.drawString(
             original,
             overlayText,
             font: img.arial14,
             x: padding,
-            y: y < 0 ? 0 : y,
+            y: y,
             color: textColor,
           );
           final encoded = img.encodeJpg(original, quality: 90);
