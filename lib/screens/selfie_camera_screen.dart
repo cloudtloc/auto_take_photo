@@ -40,7 +40,7 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
   InputImageRotation _rotation = InputImageRotation.rotation0deg;
   DateTime? _lastCaptureTime;
   static const _cooldownAfterCapture = Duration(seconds: 3);
-  String _loadingStep = '';
+  String _loadingStep = 'Đang chuẩn bị...';
 
   @override
   void initState() {
@@ -49,9 +49,15 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) => _doInit());
   }
 
+  Future<void> _yieldToUi() async {
+    await Future.delayed(const Duration(milliseconds: 80));
+  }
+
   Future<void> _doInit() async {
     if (!mounted) return;
     setState(() => _loadingStep = 'Đang kiểm tra quyền...');
+    await _yieldToUi();
+    if (!mounted) return;
     final cameraStatus = await Permission.camera.status;
     if (!cameraStatus.isGranted) {
       if (mounted) {
@@ -65,6 +71,8 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
     }
     if (!mounted) return;
     setState(() => _loadingStep = 'Đang tải mô hình nhận diện...');
+    await _yieldToUi();
+    if (!mounted) return;
     try {
       _initDetector();
     } catch (e) {
@@ -78,6 +86,8 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
     }
     if (!mounted) return;
     setState(() => _loadingStep = 'Đang khởi tạo camera...');
+    await _yieldToUi();
+    if (!mounted) return;
     await _initCamera();
     if (mounted) setState(() => _loadingStep = '');
   }
@@ -134,6 +144,8 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
     }
     if (_cameras.isEmpty) {
       if (mounted) setState(() => _loadingStep = 'Đang lấy danh sách camera...');
+      await _yieldToUi();
+      if (!mounted) return;
       try {
         _cameras = await availableCameras();
       } catch (e) {
@@ -159,6 +171,8 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
   Future<void> _startCamera() async {
     final camera = _cameras[_cameraIndex];
     if (mounted) setState(() => _loadingStep = 'Đang mở camera...');
+    await _yieldToUi();
+    if (!mounted) return;
     _controller = CameraController(
       camera,
       ResolutionPreset.medium,
@@ -448,19 +462,38 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
 
   Widget _buildLoading() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(color: Colors.white),
-          if (_loadingStep.isNotEmpty) ...[
-            const SizedBox(height: 16),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 24),
+        decoration: BoxDecoration(
+          color: Colors.black87,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white24, width: 1),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 48,
+              height: 48,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 3,
+              ),
+            ),
+            const SizedBox(height: 20),
             Text(
-              _loadingStep,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              _loadingStep.isNotEmpty ? _loadingStep : 'Đang tải...',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
-        ],
+        ),
       ),
     );
   }
