@@ -1,7 +1,38 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'screens/selfie_camera_screen.dart';
+
+// #region agent log
+void _agentDebugLog({
+  required String runId,
+  required String hypothesisId,
+  required String location,
+  required String message,
+  required Map<String, dynamic> data,
+}) {
+  final log = {
+    'sessionId': '3c4b30',
+    'runId': runId,
+    'hypothesisId': hypothesisId,
+    'location': location,
+    'message': message,
+    'data': data,
+    'timestamp': DateTime.now().millisecondsSinceEpoch,
+  };
+  try {
+    final file = File('debug-3c4b30.log');
+    file.writeAsStringSync(
+      '${jsonEncode(log)}\n',
+      mode: FileMode.append,
+      flush: true,
+    );
+  } catch (_) {}
+}
+// #endregion agent log
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +75,18 @@ class _PermissionWrapperState extends State<PermissionWrapper> {
 
   Future<void> _requestPermissions() async {
     try {
+      // #region agent log
+      _agentDebugLog(
+        runId: 'initial',
+        hypothesisId: 'H1',
+        location: 'main.dart:_requestPermissions:before',
+        message: 'Requesting camera/location permissions',
+        data: {
+          'platform': Platform.operatingSystem,
+        },
+      );
+      // #endregion agent log
+
       final statuses = await [
         Permission.camera,
         Permission.locationWhenInUse,
@@ -51,6 +94,19 @@ class _PermissionWrapperState extends State<PermissionWrapper> {
 
       final cam = statuses[Permission.camera];
       final loc = statuses[Permission.locationWhenInUse];
+
+      // #region agent log
+      _agentDebugLog(
+        runId: 'initial',
+        hypothesisId: 'H1',
+        location: 'main.dart:_requestPermissions:after',
+        message: 'Permissions request result',
+        data: {
+          'camera': cam?.toString(),
+          'location': loc?.toString(),
+        },
+      );
+      // #endregion agent log
 
       if (mounted) {
         setState(() {
@@ -60,6 +116,18 @@ class _PermissionWrapperState extends State<PermissionWrapper> {
         });
       }
     } catch (e) {
+      // #region agent log
+      _agentDebugLog(
+        runId: 'initial',
+        hypothesisId: 'H2',
+        location: 'main.dart:_requestPermissions:error',
+        message: 'Error when requesting permissions',
+        data: {
+          'error': e.toString(),
+        },
+      );
+      // #endregion agent log
+
       if (mounted) {
         setState(() {
           _checked = true;
