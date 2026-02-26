@@ -1,5 +1,5 @@
 name: ml_kit_selfie
-description: "A new Flutter project."
+description: "Ung dung tu dong chup anh khi phat hien khuon mat, gan thoi gian va dia diem."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -51,6 +51,15 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon_app.png"
+  adaptive_icon_background: "#5E35B1"
+  adaptive_icon_foreground: "assets/icon_app.png"
+  adaptive_icon_padding: 20
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

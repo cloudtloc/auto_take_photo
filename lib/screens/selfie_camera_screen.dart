@@ -4,14 +4,15 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../services/place_name_service.dart';
 import '../utils/camera_input_image.dart';
+import '../utils/overlay_text_on_image.dart';
 import 'captured_photos_screen.dart';
 
 class SelfieCameraScreen extends StatefulWidget {
@@ -37,13 +38,48 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
   String? _lastCapturedPath;
   String? _errorMessage;
   InputImageRotation _rotation = InputImageRotation.rotation0deg;
+  DateTime? _lastCaptureTime;
+  static const _cooldownAfterCapture = Duration(seconds: 3);
+  String _loadingStep = '';
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initDetector();
-    _initCamera();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _doInit());
+  }
+
+  Future<void> _doInit() async {
+    if (!mounted) return;
+    setState(() => _loadingStep = 'Đang kiểm tra quyền...');
+    final cameraStatus = await Permission.camera.status;
+    if (!cameraStatus.isGranted) {
+      if (mounted) {
+        setState(() {
+          _loadingStep = '';
+          _errorMessage =
+              'Chưa cấp quyền camera. Vui lòng bật quyền trong Cài đặt.';
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _loadingStep = 'Đang tải mô hình nhận diện...');
+    try {
+      _initDetector();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingStep = '';
+          _errorMessage = 'Khởi tạo thất bại: $e';
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _loadingStep = 'Đang khởi tạo camera...');
+    await _initCamera();
+    if (mounted) setState(() => _loadingStep = '');
   }
 
   @override
@@ -93,11 +129,20 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
   }
 
   Future<void> _initCamera() async {
+    if (mounted && _loadingStep.isEmpty) {
+      setState(() => _loadingStep = 'Đang khởi tạo camera...');
+    }
     if (_cameras.isEmpty) {
+      if (mounted) setState(() => _loadingStep = 'Đang lấy danh sách camera...');
       try {
         _cameras = await availableCameras();
       } catch (e) {
-        setState(() => _errorMessage = 'Không lấy được danh sách camera: $e');
+        if (mounted) {
+          setState(() {
+            _loadingStep = '';
+            _errorMessage = 'Không lấy được danh sách camera: $e';
+          });
+        }
         return;
       }
     }
@@ -113,9 +158,10 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
 
   Future<void> _startCamera() async {
     final camera = _cameras[_cameraIndex];
+    if (mounted) setState(() => _loadingStep = 'Đang mở camera...');
     _controller = CameraController(
       camera,
-      ResolutionPreset.high,
+      ResolutionPreset.medium,
       enableAudio: false,
       imageFormatGroup: Platform.isAndroid
           ? ImageFormatGroup.nv21
@@ -124,11 +170,26 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
     try {
       await _controller!.initialize();
       if (!mounted) return;
-      setState(() => _errorMessage = null);
+      setState(() {
+        _errorMessage = null;
+        _loadingStep = '';
+      });
       _startStream();
       setState(() {});
     } on CameraException catch (e) {
-      setState(() => _errorMessage = 'Lỗi máy ảnh: ${e.description}');
+      if (mounted) {
+        setState(() {
+          _loadingStep = '';
+          _errorMessage = 'Lỗi máy ảnh: ${e.description}';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingStep = '';
+          _errorMessage = 'Lỗi: $e';
+        });
+      }
     }
   }
 
@@ -178,6 +239,10 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
 
   void _updateAutoCapture(List<Face> faces) {
     if (_isCapturing) return;
+    if (_lastCaptureTime != null &&
+        DateTime.now().difference(_lastCaptureTime!) < _cooldownAfterCapture) {
+      return;
+    }
     if (faces.length == 1) {
       final face = faces.first;
       final rotY = face.headEulerAngleY?.abs() ?? 0;
@@ -200,14 +265,14 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
 
   Future<void> _triggerCapture() async {
     if (_controller == null || !_controller!.value.isInitialized || _isCapturing) return;
+    _isCapturing = true;
 
-    // Bắt buộc phải có vị trí trước khi chụp.
     final Position? pos = await _requireLocation();
     if (pos == null) {
+      if (mounted) setState(() => _isCapturing = false);
       return;
     }
 
-    _isCapturing = true;
     await _stopStream();
     try {
       final XFile file = await _controller!.takePicture();
@@ -234,25 +299,12 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
 
       try {
         final bytes = await File(file.path).readAsBytes();
-        final img.Image? original = img.decodeImage(bytes);
-        if (original != null) {
-          final textColor = img.ColorRgba8(255, 255, 255, 255);
-          const padding = 16;
-          final numLines = overlayText.split('\n').length;
-          final lineHeight = 18;
-          int y = original.height - (lineHeight * numLines + 12);
-          if (y < 8) y = 8;
-          img.drawString(
-            original,
-            overlayText,
-            font: img.arial14,
-            x: padding,
-            y: y,
-            color: textColor,
-          );
-          final encoded = img.encodeJpg(original, quality: 90);
-          await File(path).writeAsBytes(encoded);
-        } else {
+        final ok = await overlayTextOnImage(
+          imageBytes: bytes,
+          outputPath: path,
+          overlayText: overlayText,
+        );
+        if (!ok) {
           await File(file.path).copy(path);
         }
       } catch (_) {
@@ -264,6 +316,7 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
       } catch (_) {}
 
       if (mounted) {
+        _lastCaptureTime = DateTime.now();
         setState(() {
           _lastCapturedPath = path;
           _isCapturing = false;
@@ -387,8 +440,27 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
         child: _errorMessage != null
             ? _buildError()
             : _controller == null || !_controller!.value.isInitialized
-                ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                ? _buildLoading()
                 : _buildCamera(),
+      ),
+    );
+  }
+
+  Widget _buildLoading() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(color: Colors.white),
+          if (_loadingStep.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              _loadingStep,
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -408,7 +480,10 @@ class _SelfieCameraScreenState extends State<SelfieCameraScreen>
             const SizedBox(height: 16),
             TextButton(
               onPressed: () {
-                setState(() => _errorMessage = null);
+                setState(() {
+                  _errorMessage = null;
+                  _loadingStep = 'Đang khởi tạo camera...';
+                });
                 _initCamera();
               },
               child: const Text('Tải lại', style: TextStyle(color: Colors.white)),

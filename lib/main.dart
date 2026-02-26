@@ -14,7 +14,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ML Kit Tu Chup Anh',
+      title: 'Tu Chup Anh',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
@@ -43,19 +43,31 @@ class _PermissionWrapperState extends State<PermissionWrapper> {
   }
 
   Future<void> _requestPermissions() async {
-    final statuses = await [
-      Permission.camera,
-      Permission.locationWhenInUse,
-    ].request();
+    try {
+      final statuses = await [
+        Permission.camera,
+        Permission.locationWhenInUse,
+      ].request();
 
-    final cam = statuses[Permission.camera];
-    final loc = statuses[Permission.locationWhenInUse];
+      final cam = statuses[Permission.camera];
+      final loc = statuses[Permission.locationWhenInUse];
 
-    setState(() {
-      _checked = true;
-      _cameraGranted = cam?.isGranted ?? false;
-      _locationGranted = loc?.isGranted ?? false;
-    });
+      if (mounted) {
+        setState(() {
+          _checked = true;
+          _cameraGranted = cam?.isGranted ?? false;
+          _locationGranted = loc?.isGranted ?? false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _checked = true;
+          _cameraGranted = false;
+          _locationGranted = false;
+        });
+      }
+    }
   }
 
   @override
@@ -75,18 +87,18 @@ class _PermissionWrapperState extends State<PermissionWrapper> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Text(
-                  'Ung dung can quyen camera de tu dong chup anh. Vui long bat quyen trong Cai dat.',
+                  'Ứng dụng cần quyền camera để tự động chụp ảnh. Vui lòng bật quyền trong Cài đặt.',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Neu tu choi quyen vi tri, anh van duoc chup nhung se khong gan toa do len anh.',
+                  'Nếu từ chối quyền vị trí, ảnh vẫn được chụp nhưng sẽ không gắn tọa độ lên ảnh.',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: () => openAppSettings(),
-                  child: const Text('Mo Cai dat'),
+                  child: const Text('Mở Cài đặt'),
                 ),
               ],
             ),
